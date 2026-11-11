@@ -68,8 +68,28 @@ the server is **very consistent** — no long tail under single-request load.
 32 requests per level, sent with increasing parallelism.
 
 See the table in the TL;DR. Throughput nearly doubled again from concurrency 8 to
-16 (377 → 744 tok/s), meaning the GPU **still had headroom** at 8 — the saturation
-point (where the 6 GB KV cache fills up) is higher and is the next thing to measure.
+16 (377 → 744 tok/s), meaning the GPU still had headroom — so the next step was to
+find where it actually saturates.
+
+### 3. Saturation point (throughput + latency vs concurrency)
+
+Pushing concurrency further, measuring throughput **and** latency together:
+
+| Concurrency | Throughput | p50 | p99 |
+| --- | --- | --- | --- |
+| 32 | 1318 tok/s | 2.78 s | 2.93 s |
+| 64 | 2212 tok/s | 3.29 s | 3.34 s |
+| 128 | 2250 tok/s | 3.21 s | 3.27 s |
+| 256 | 2298 tok/s | 3.28 s | 3.31 s |
+
+**The GPU saturates around concurrency 64.** From 32→64 throughput nearly doubles,
+but from 64→256 it moves only +4% (2212 → 2298 tok/s) despite 4× more concurrency —
+and p99 latency stays flat (~3.3 s) instead of exploding. vLLM absorbs the overload
+by **queueing requests in order** rather than degrading each one.
+
+**Capacity takeaway:** this configuration comfortably serves up to ~64 concurrent
+requests, with a throughput ceiling of ~2250 tok/s. Beyond that, adding concurrency
+buys no extra useful work — exactly the kind of number you size a real system on.
 
 ---
 
@@ -94,8 +114,9 @@ point (where the 6 GB KV cache fills up) is higher and is the next thing to meas
 ./serve.sh
 
 # 2. Benchmark (another terminal, once "Application startup complete" shows)
-python bench_serve.py      # sequential latency / throughput
-python bench_parallel.py   # throughput vs concurrency
+python bench_serve.py        # sequential latency / throughput
+python bench_parallel.py     # throughput vs concurrency
+python bench_saturation.py   # throughput + latency vs concurrency (finds saturation)
 ```
 
 Requires an NVIDIA GPU, `vllm`, and Python 3.12. See `serve.sh` for the exact
@@ -105,7 +126,6 @@ server flags.
 
 ## What's next
 
-- Find the saturation point (concurrency 32 / 64) and the latency/throughput trade-off curve.
 - Containerize the server with Docker.
 - Deploy on a local Kubernetes cluster (kind/minikube).
 - Quantization (AWQ) and a compile-on vs compile-off before/after (next project).
