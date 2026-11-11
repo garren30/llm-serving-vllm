@@ -91,6 +91,27 @@ by **queueing requests in order** rather than degrading each one.
 requests, with a throughput ceiling of ~2250 tok/s. Beyond that, adding concurrency
 buys no extra useful work — exactly the kind of number you size a real system on.
 
+### 4. Output length drives latency (~18 ms/token, constant)
+
+Same input prompt, varying `max_tokens` on the response (`ignore_eos=True` forces
+an exact length). Input tokens stay fixed at 35.
+
+| Output tokens | Time | ms / token |
+| --- | --- | --- |
+| 32 | 0.59 s | 18.5 ms |
+| 64 | 1.18 s | 18.4 ms |
+| 128 | 2.35 s | 18.4 ms |
+| 256 | 4.70 s | 18.4 ms |
+| 512 | 9.45 s | 18.5 ms |
+
+Latency grows **linearly** with output length (512 tokens = 16× the time of 32),
+and the **per-token cost stays flat at ~18.4 ms** regardless of length. This is the
+autoregressive decode loop: each output token is one sequential step of fixed cost.
+
+**Cost-model takeaway:** request latency is driven by **output length**, not input
+length — the generated tokens dominate. This is why `max_tokens` is the main knob
+for controlling latency and cost per request.
+
 ---
 
 ## Design decisions & trade-offs
@@ -117,6 +138,7 @@ buys no extra useful work — exactly the kind of number you size a real system 
 python bench_serve.py        # sequential latency / throughput
 python bench_parallel.py     # throughput vs concurrency
 python bench_saturation.py   # throughput + latency vs concurrency (finds saturation)
+python bench_outlen.py       # latency vs output length (max_tokens)
 ```
 
 Requires an NVIDIA GPU, `vllm`, and Python 3.12. See `serve.sh` for the exact
