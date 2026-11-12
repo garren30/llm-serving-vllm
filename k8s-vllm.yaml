@@ -1,0 +1,75 @@
+# Kubernetes manifests for the vLLM server (GPU-ready).
+#
+# These are written to run on a real Kubernetes cluster with GPU nodes
+# (the NVIDIA device plugin installed, nodes advertising nvidia.com/gpu).
+# On a local kind-on-WSL cluster the pod stays Pending because no node
+# advertises a GPU — which is the scheduler working correctly, not a bug.
+#
+#   kubectl apply -f k8s-vllm.yaml
+#   kubectl get pods            # Pending locally (no GPU node); Running on a GPU cluster
+#   kubectl describe pod ...    # shows "insufficient nvidia.com/gpu"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen
+  labels:
+    app: vllm-qwen
+spec:
+  replicas: 1                         # one GPU, one replica
+  selector:
+    matchLabels:
+      app: vllm-qwen
+  template:
+    metadata:
+      labels:
+        app: vllm-qwen
+    spec:
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest
+          args:
+            - --model=Qwen/Qwen2.5-1.5B-Instruct
+            - --max-model-len=4096
+            - --gpu-memory-utilization=0.80
+            - --enforce-eager
+          env:
+            - name: VLLM_USE_FLASHINFER_SAMPLER
+              value: "0"
+          ports:
+            - containerPort: 8000
+          resources:
+            limits:
+              nvidia.com/gpu: 1       # ← requests 1 GPU from the scheduler
+          volumeMounts:
+            - name: shm
+              mountPath: /dev/shm     # vLLM needs shared memory (like --ipc=host)
+          readinessProbe:             # don't send traffic until the model is loaded
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:              # restart the pod if it stops responding
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-qwen-svc
+spec:
+  selector:
+    app: vllm-qwen
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP

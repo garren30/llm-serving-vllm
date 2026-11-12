@@ -165,11 +165,35 @@ python bench_outlen.py       # latency vs output length (max_tokens)
 Requires an NVIDIA GPU, `vllm`, and Python 3.12. See `serve.sh` for the exact
 server flags.
 
+### Option C — Kubernetes (`k8s-vllm.yaml`)
+
+Production-style manifests (Deployment + Service) with a GPU request, a shared-memory
+volume for vLLM, and health probes:
+
+```bash
+kubectl apply -f k8s-vllm.yaml
+kubectl get pods
+```
+
+The Deployment requests `nvidia.com/gpu: 1`. On a cluster with GPU nodes (NVIDIA
+device plugin installed) the pod schedules and runs as-is. On a local `kind` cluster
+with no GPU node, the pod correctly stays **`Pending`**:
+
+```
+Warning  FailedScheduling  0/1 nodes are available: 1 Insufficient nvidia.com/gpu
+```
+
+That is the Kubernetes scheduler doing its job — it refuses to place a pod that
+requests a resource no node advertises, rather than starting it and crashing. The
+manifest itself is valid (probes, shm volume, and GPU limit all accepted); only the
+GPU hardware is absent in the local environment. (GPU passthrough into `kind` isn't
+available under Docker Desktop on WSL2; Docker's own `--gpus all` path — used by the
+Docker option above — does give the container the GPU.)
+
 ---
 
 ## What's next
 
-- Deploy on a local Kubernetes cluster (kind/minikube).
 - Quantization (AWQ) and a compile-on vs compile-off before/after (next project).
 
 ---
