@@ -125,10 +125,31 @@ for controlling latency and cost per request.
   focus on *serving methodology*, which transfers to any model size.
 - **`VLLM_USE_FLASHINFER_SAMPLER=0`:** avoids a runtime CUDA-toolkit (nvcc)
   dependency by using the Triton sampling path instead of FlashInfer.
+- **Docker with the official vLLM image:** the native setup needed five system
+  dependencies solved by hand (driver, gcc, Python headers, nvcc, memory flags).
+  The container ships all of that pre-built — the host only has to pass in the GPU
+  (`--gpus all`) and map the port. This is the whole point of containerizing a
+  GPU service: a complex environment packaged once, reproduced anywhere.
 
 ---
 
 ## How to run
+
+### Option A — Docker (recommended, reproducible)
+
+The server is packaged with the official vLLM image and a `docker-compose.yml`
+that wires up the GPU, port, and flags. One command, same result on any machine
+with Docker + an NVIDIA GPU:
+
+```bash
+docker compose up
+```
+
+GPU access inside the container is declared in `docker-compose.yml`
+(`deploy.resources.reservations.devices`, equivalent to `--gpus all`). No manual
+dependency setup — the image ships the full CUDA/vLLM stack.
+
+### Option B — Native (local venv)
 
 ```bash
 # 1. Start the server (one terminal)
@@ -148,7 +169,6 @@ server flags.
 
 ## What's next
 
-- Containerize the server with Docker.
 - Deploy on a local Kubernetes cluster (kind/minikube).
 - Quantization (AWQ) and a compile-on vs compile-off before/after (next project).
 

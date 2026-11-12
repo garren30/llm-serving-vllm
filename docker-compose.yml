@@ -1,0 +1,22 @@
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-qwen
+    ports:
+      - "8000:8000"                      # API alcanzable en localhost:8000
+    environment:
+      - VLLM_USE_FLASHINFER_SAMPLER=0    # usa la ruta Triton (evita nvcc/FlashInfer)
+    ipc: host                            # memoria compartida que vLLM necesita
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all                 # da acceso a la GPU (equiv. a --gpus all)
+              capabilities: [gpu]
+    command:
+      - --model=Qwen/Qwen2.5-1.5B-Instruct
+      - --max-model-len=4096
+      - --gpu-memory-utilization=0.80
+      - --enforce-eager
+    restart: unless-stopped              # se reinicia solo si se cae (no si tú lo paras)
